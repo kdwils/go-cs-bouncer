@@ -81,14 +81,14 @@ func (b *Bouncer) Get(ctx context.Context, value string) (*models.GetDecisionsRe
 	return decision, nil
 }
 
-// StartStreaming starts the streaming bouncer that sends decisions to the Stream channel
-func (b *Bouncer) StartStreaming(ctx context.Context) error {
+// StartStream starts the streaming bouncer that sends decisions to the Stream channel
+func (b *Bouncer) StartStream(ctx context.Context) error {
 	startup := true
 	ticker := time.NewTicker(b.tickerIntervalDuration)
 	defer ticker.Stop()
 
-	// no delay for the first connection
 	delay := time.After(0)
+	defer close(b.Stream)
 
 	for {
 		select {
@@ -115,9 +115,6 @@ func (b *Bouncer) StartStreaming(ctx context.Context) error {
 			}
 
 			if startup {
-				// close the stream
-				// this may cause the bouncer to exit
-				close(b.Stream)
 				return err
 			}
 

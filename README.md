@@ -1,14 +1,6 @@
 # Go CrowdSec Bouncer
 
-`go-cs-bouncer` is a clean, simple Go library for creating CrowdSec bouncers with no external logging dependencies.
-
-## Features
-
-- **Zero Dependencies on Loggers**: No external logging framework required
-- **Unified API**: Single `Bouncer` struct supports both live queries and streaming
-- **Clean API**: Simple constructor-based initialization
-- **DRY & KISS**: Shared configuration and client building logic
-- **Type Safe**: Strong typing with proper error handling
+`go-cs-bouncer` is a simple Go library for creating CrowdSec bouncers.
 
 ## Installation
 
@@ -67,7 +59,7 @@ func main() {
 
     // Start streaming in a goroutine
     go func() {
-        if err := bouncer.StartStreaming(ctx); err != nil {
+        if err := bouncer.StartStream(ctx); err != nil {
             log.Printf("Streaming stopped: %v", err)
         }
         cancel()
@@ -102,7 +94,7 @@ if err != nil {
 decisions, err := bouncer.Get(ctx, "1.2.3.4")
 
 // Or start streaming
-go bouncer.StartStreaming(ctx)
+go bouncer.StartStream(ctx)
 for decision := range bouncer.Stream {
     // Process decisions
 }
@@ -154,7 +146,7 @@ func NewBouncerFromFile(configPath string) (*Bouncer, error)
 func (b *Bouncer) Get(ctx context.Context, value string) (*models.GetDecisionsResponse, error)
 
 // Streaming
-func (b *Bouncer) StartStreaming(ctx context.Context) error
+func (b *Bouncer) StartStream(ctx context.Context) error
 func (b *Bouncer) Stream chan *models.DecisionsStreamResponse
 
 // Configuration
@@ -211,7 +203,7 @@ decisions, err := bouncer.Get(ctx, "1.2.3.4")
 ### Streaming Only
 ```go
 bouncer, _ := csbouncer.NewBouncer(config)
-go bouncer.StartStreaming(ctx)
+go bouncer.StartStream(ctx)
 for decision := range bouncer.Stream {
     // Process streaming decisions...
 }
@@ -225,7 +217,7 @@ bouncer, _ := csbouncer.NewBouncer(config)
 decisions, _ := bouncer.Get(ctx, "1.2.3.4")
 
 // Also start streaming for real-time updates
-go bouncer.StartStreaming(ctx)
+go bouncer.StartStream(ctx)
 for decision := range bouncer.Stream {
     // Process streaming decisions...
 }
@@ -248,8 +240,3 @@ type Decision struct {
     EndIP     int64   `json:"end_ip"`     // End IP (for ranges)
 }
 ```
-
-## License
-
-MIT License - see LICENSE file for details.
-
