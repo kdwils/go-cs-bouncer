@@ -6,23 +6,22 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/crowdsecurity/crowdsec/pkg/apiclient"
 	"github.com/crowdsecurity/crowdsec/pkg/models"
 	"github.com/crowdsecurity/go-cs-lib/version"
 )
 
+// MetricsUpdater is a function type for updating metrics
 type MetricsUpdater func(*models.RemediationComponentsMetrics, time.Duration)
 
 const defaultMetricsInterval = 15 * time.Minute
 
+// MetricsProvider handles usage metrics reporting to CrowdSec LAPI
 type MetricsProvider struct {
 	APIClient *apiclient.ApiClient
 	Interval  time.Duration
 	static    staticMetrics
 	updater   MetricsUpdater
-	logger    logrus.FieldLogger
 }
 
 type staticMetrics struct {
@@ -33,7 +32,7 @@ type staticMetrics struct {
 	bouncerType  string
 }
 
-// newStaticMetrics should be called once over the lifetime of the program (more if we support hot-reload).
+// newStaticMetrics creates static metrics for a bouncer type
 func newStaticMetrics(bouncerType string) staticMetrics {
 	osName, osVersion := version.DetectOS()
 
@@ -46,14 +45,14 @@ func newStaticMetrics(bouncerType string) staticMetrics {
 	}
 }
 
-func NewMetricsProvider(client *apiclient.ApiClient, bouncerType string, updater MetricsUpdater, logger logrus.FieldLogger) (*MetricsProvider, error) {
+// NewMetricsProvider creates a new metrics provider
+func NewMetricsProvider(client *apiclient.ApiClient, bouncerType string, updater MetricsUpdater) *MetricsProvider {
 	return &MetricsProvider{
 		APIClient: client,
 		Interval:  defaultMetricsInterval,
 		updater:   updater,
 		static:    newStaticMetrics(bouncerType),
-		logger:    logger,
-	}, nil
+	}
 }
 
 func (m *MetricsProvider) metricsPayload() *models.AllMetrics {
@@ -86,7 +85,7 @@ func (m *MetricsProvider) metricsPayload() *models.AllMetrics {
 	}
 }
 
-func (m *MetricsProvider) sendMetrics(ctx context.Context) {
+func (m *MetricsProvider) sendMetrics(ctx context.Context) error {
 	ctxTime, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -95,36 +94,33 @@ func (m *MetricsProvider) sendMetrics(ctx context.Context) {
 	_, resp, err := m.APIClient.UsageMetrics.Add(ctxTime, met)
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
-		m.logger.Warnf("timeout sending metrics")
+		return errors.New("timeout sending metrics")
 	case resp != nil && resp.Response != nil && resp.Response.StatusCode == http.StatusNotFound:
-		m.logger.Warnf("metrics endpoint not found, older LAPI?")
+		return errors.New("metrics endpoint not found, older LAPI?")
 	case err != nil:
-		m.logger.Warnf("failed to send metrics: %s", err)
+		return err
 	case resp.Response.StatusCode != http.StatusCreated:
-		m.logger.Warnf("failed to send metrics: %s", resp.Response.Status)
+		return errors.New("failed to send metrics: " + resp.Response.Status)
 	default:
-		m.logger.Debug("usage metrics sent")
+		return nil // success
 	}
 }
 
+// Run starts the metrics provider in a loop
 func (m *MetricsProvider) Run(ctx context.Context) error {
 	if m.Interval == 0 {
-		m.logger.Infof("usage metrics disabled")
-		return nil
-	}
-
-	if m.updater == nil {
-		m.logger.Warningf("no updater provided, metrics will be static")
+		return nil // metrics disabled
 	}
 
 	ticker := time.NewTicker(m.Interval)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			m.sendMetrics(ctx)
+			_ = m.sendMetrics(ctx) // ignore errors for non-blocking operation
 		}
 	}
 }
